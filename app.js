@@ -26,8 +26,11 @@
           options: [opt("男", "o.male"), opt("女", "o.female")],
         },
         { id: "birthday", type: "date", label: "f.birthday", col: "生年月日", required: true },
-        { id: "address", type: "textarea", label: "f.address", col: "住所", required: true, rows: 2, autocomplete: "street-address" },
         { id: "phone", type: "tel", label: "f.phone", hint: "f.phone.hint", col: "電話番号", required: true, check: "phone" },
+        { id: "addressNote", type: "note", label: "f.addressNote" },
+        { id: "zipcode", type: "text", label: "f.zipcode", hint: "f.zipcode.hint", required: false, check: "zipJp" },
+        { id: "addressCity", type: "text", label: "f.addressCity", required: true },
+        { id: "addressStreet", type: "text", label: "f.addressStreet", hint: "f.addressStreet.hint", required: true },
       ],
     },
     {
@@ -225,6 +228,7 @@
     if (f.check === "phone" && !/^\+?[0-9]{8,15}$/.test(s.replace(/[\s-]/g, ""))) return "e.phone";
     if (f.check === "romaji" && !/^[A-Za-z][A-Za-z .'-]*$/.test(s)) return "e.romaji";
     if (f.check === "card" && !/^[A-Z]{2}[0-9]{8}[A-Z]{2}$/.test(s.replace(/\s/g, "").toUpperCase())) return "e.card";
+    if (f.check === "zipJp" && !/^[0-9]{7}$/.test(s.replace(/-/g, ""))) return "e.zip";
     if (f.check === "future" && s < today()) return "e.expiryPast";
     if (f.check === "afterMoveIn" && state.answers.moveIn && s <= state.answers.moveIn) return "e.moveOut";
     return "";
@@ -365,10 +369,23 @@
       return `${header()}<main class="card intro">${introBody}<p class="muted" style="text-align:center;padding:1rem">${esc(t("status.loading"))}</p></main>`;
     }
     if (isFound) {
+      const phases = d.phases || ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"];
+      const phaseKeys = ["o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.payment", "o.phase.complete"];
+      const cur = phases.indexOf(d.status);
+      const phaseList = phases.map((p, i) => {
+        const done = cur >= 0 && i < cur;
+        const active = i === cur;
+        return `<li class="phase-item ${done ? "is-done" : ""} ${active ? "is-active" : ""}">
+          <span class="phase-dot" aria-hidden="true">${done ? "✓" : i + 1}</span>
+          <span>${esc(t(phaseKeys[i]))}</span>
+        </li>`;
+      }).join("");
       return `
         ${header()}
         <main class="card intro">
-          ${introBody}
+          <h2>${esc(t("status.title"))}</h2>
+          <p class="muted">${esc(t("status.name", { name: d.name }))}</p>
+          <ol class="phase-list" style="margin-bottom:1.5rem">${phaseList}</ol>
           <button type="button" class="btn btn--primary btn--block" data-act="viewApplication">${esc(t("intro.view"))}</button>
           ${canEdit ? `<button type="button" class="btn btn--ghost btn--block" data-act="start">${esc(t("intro.edit"))}</button>` : ""}
         </main>`;
@@ -488,6 +505,19 @@
     }
   };
 
+  const fetchAddressByZip = async (zip) => {
+    try {
+      const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zip}`);
+      const data = await res.json();
+      if (data.results && data.results[0]) {
+        const r = data.results[0];
+        state.answers.addressCity = r.address1 + r.address2 + r.address3;
+        delete state.errors.addressCity;
+        render({ focusId: "addressStreet" });
+      }
+    } catch (_) {}
+  };
+
   const toast = (msg) => {
     const el = document.createElement("div");
     el.className = "toast";
@@ -511,6 +541,10 @@
       if (val !== el.value) { el.value = val; el.setSelectionRange(pos, pos); }
     }
     state.answers[id] = val;
+    if (id === "zipcode") {
+      const clean = val.replace(/[^0-9]/g, "");
+      if (clean.length === 7) fetchAddressByZip(clean);
+    }
     if (state.errors[id] || state.errors[id.replace("__other", "")]) {
       delete state.errors[id];
       delete state.errors[id.replace("__other", "")];
@@ -602,6 +636,16 @@
         if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
         if (!data.ok) throw new Error(data.error || "status failed");
         state.statusData = data;
+        // draftがない場合のみGASのフォームデータでanswersを復元
+        if (!navigate && data.formData && Object.keys(state.answers).length === 0) {
+          const colToField = {};
+          for (const s of STEPS) for (const f of s.fields) { if (f.col) colToField[f.col] = f.id; }
+          const restored = {};
+          for (const [col, val] of Object.entries(data.formData)) {
+            if (colToField[col] && val !== "" && val !== undefined) restored[colToField[col]] = String(val);
+          }
+          if (Object.keys(restored).length) { state.answers = restored; saveDraft(); }
+        }
       }
     } catch (err) {
       console.error(err);
@@ -618,6 +662,13 @@
       const v = sheetValue(f);
       if (f.check === "card") out[f.col] = v.replace(/\s/g, "").toUpperCase();
       else out[f.col] = v;
+    }
+    // 住所を連結
+    const city = (state.answers.addressCity || "").trim();
+    const street = (state.answers.addressStreet || "").trim();
+    if (city || street) {
+      const zip = (state.answers.zipcode || "").replace(/[^0-9]/g, "");
+      out["住所"] = [zip ? `〒${zip}` : "", city, street].filter(Boolean).join(" ");
     }
     out["回答言語"] = state.lang;
     if (expiryWarning()) out["要確認"] = "在留期間の満了日が退去予定日より前";
@@ -645,7 +696,6 @@
           if (liff.isInClient()) await liff.sendMessages([{ type: "text", text: "入居確定フォームを送信しました" }]);
         } catch (_) {}
       }
-      clearDraft();
       state.sending = false; state.screen = "done"; render({ scrollTop: true });
     } catch (err) {
       console.error(err);

@@ -76,13 +76,25 @@ function doGet(e) {
     }
     const row = findRowByUserId_(profile.sub);
     if (!row) return json_({ ok: true, found: false });
+    const FORM_COLS = ['姓', '名', 'フルネーム（ローマ字）', 'メールアドレス', '生年月日', '性別',
+      '住所', '電話番号', '国籍区分', '国籍', 'マイナンバーカード', '本人確認書類の提示',
+      '在留資格', '在留カード番号', '在留期間の満了日', '職業', '所属（学校名 / 会社名）', '学年',
+      '部屋タイプ', '入居開始日', '退去予定日',
+      '緊急連絡先 氏名', '緊急連絡先 電話番号', '緊急連絡先 続柄',
+      '現在の起業活動状況を教えてください。', 'SEKIYA.soを知った経緯', '入居を決めた理由を教えてください！', '以下ご確認くだください'];
+    const formData = {};
+    FORM_COLS.forEach(function(col) {
+      const v = row[col];
+      if (v !== undefined && v !== null && v !== '') {
+        formData[col] = v instanceof Date ? Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd') : String(v);
+      }
+    });
     return json_({
       ok: true, found: true,
       status: row['手続き状況'] || '受付',
       name: [row['姓'], row['名']].filter(Boolean).join(' '),
-      moveIn: row['入居開始日'] || '',
-      moveOut: row['退去予定日'] || '',
       phases: PHASES,
+      formData,
     });
   }
 
