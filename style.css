@@ -20,7 +20,10 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --font: "Noto Sans JP", "Noto Sans KR", system-ui, -apple-system, "Hiragino Sans", sans-serif;
 }
+:lang(zh) { --font: "Noto Sans SC", "Noto Sans JP", system-ui, -apple-system, "PingFang SC", sans-serif; }
 :lang(ko) { --font: "Noto Sans KR", "Noto Sans JP", system-ui, -apple-system, sans-serif; }
+.lang button:lang(zh) { font-family: "Noto Sans SC", sans-serif; }
+.lang button:lang(ko) { font-family: "Noto Sans KR", sans-serif; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -51,7 +54,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: #f7efe4;
   padding: calc(18px + env(safe-area-inset-top)) 20px 18px;
 }
-.brand__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .wordmark {
   font-family: "Jost", sans-serif;
   font-weight: 300;
@@ -80,7 +83,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .lang { display: flex; background: rgba(255, 255, 255, 0.1); border-radius: 999px; padding: 3px; }
 .lang button {
   border: 0; background: transparent; color: rgba(247, 239, 228, 0.78);
-  padding: 5px 10px; border-radius: 999px; font-size: 12px; cursor: pointer;
+  padding: 5px 9px; border-radius: 999px; font-size: 12px; cursor: pointer; white-space: nowrap;
   transition: background 0.2s var(--ease), color 0.2s var(--ease);
   min-height: 32px;
 }

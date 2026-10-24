@@ -146,9 +146,10 @@
   };
   const pickLang = (code) => {
     const c = (code || "").toLowerCase();
+    if (c.startsWith("en")) return "en";
+    if (c.startsWith("zh")) return "zh";
     if (c.startsWith("ko")) return "ko";
-    if (c.startsWith("ja")) return "ja";
-    return "en";
+    return "ja";
   };
 
   // ---------- helpers ----------
@@ -248,7 +249,7 @@
       <div class="brand__row">
         <div class="wordmark" aria-label="SEKIYA.so">S<span class="dot">E</span>K<span class="dot">I</span>YA<small>.so</small></div>
         <div class="lang" role="group" aria-label="Language">
-          ${["ja", "ko", "en"].map((l) => `<button type="button" data-lang="${l}" class="${state.lang === l ? "is-on" : ""}" aria-pressed="${state.lang === l}">${{ ja: "日本語", ko: "한국어", en: "EN" }[l]}</button>`).join("")}
+          ${["ja", "en", "zh", "ko"].map((l) => `<button type="button" data-lang="${l}" lang="${l}" class="${state.lang === l ? "is-on" : ""}" aria-pressed="${state.lang === l}">${{ ja: "日本語", en: "EN", zh: "中文", ko: "한국어" }[l]}</button>`).join("")}
         </div>
       </div>
       <p class="brand__tag">${esc(t("app.tagline"))}</p>
@@ -548,20 +549,18 @@
   const boot = async () => {
     const params = new URLSearchParams(location.search);
     state.dev = params.has("dev") || !CFG.LIFF_ID || CFG.LIFF_ID.startsWith("REPLACE");
-    let langHint = navigator.language;
     if (!state.dev) {
       try {
         await liff.init({ liffId: CFG.LIFF_ID });
         if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
-        langHint = liff.getLanguage() || langHint;
       } catch (err) {
         console.error(err);
-        state.lang = pickLang(langHint);
         $app.innerHTML = `${header()}<main class="card"><p class="banner banner--err">${esc(t("err.liff"))}</p></main>`;
         return;
       }
     }
-    state.lang = pickLang(params.get("lang") || langHint);
+    // 端末の言語では切り替えず、日本語を基本にする（?lang=en などで指定したときだけ変える）
+    state.lang = pickLang(params.get("lang") || "ja");
     const draft = loadDraft();
     if (draft && draft.answers && Object.keys(draft.answers).length) {
       state.answers = draft.answers;

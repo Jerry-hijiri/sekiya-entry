@@ -2,7 +2,7 @@
 
 入居が決まった人にLINEの中で開いてもらう入力フォーム。Googleフォームの置き換え。
 
-- 画面: `index.html` / `app.js` / `style.css` / `i18n.js`（日本語・韓国語・英語）
+- 画面: `index.html` / `app.js` / `style.css` / `i18n.js`（日本語が基本。切替は 日本語→英語→中国語（簡体字）→韓国語 の順）
 - 設定: `config.js`（LIFF ID と Apps Script の URL。どちらも公開してよい値）
 - 受け口: `gas/Code.gs`（Google Apps Script。スプレッドシート「入居者顧客情報」→ シート「SEKIYA.so入居確定フォーム」に1行追加し、寺本のLINEに通知）
 
@@ -72,5 +72,5 @@
 ## ローカルで見る
 ```
 python3 -m http.server 8765
-# http://localhost:8765/?dev=1&lang=ko
+# http://localhost:8765/?dev=1（?lang=en / zh / ko で言語指定）
 ```
