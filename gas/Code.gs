@@ -3,8 +3,7 @@
  *
  * スクリプトプロパティ（プロジェクトの設定 → スクリプト プロパティ）に入れる値:
  *   LIFF_CHANNEL_ID    … ミニアプリ（LIFF）を作ったチャネルのチャネルID（数字）
- *   NOTIFY_LINE_TOKEN  … 寺本個人の通知用チャネルのチャネルアクセストークン
- *   NOTIFY_USER_ID     … 上と同じチャネルの「あなたのユーザーID」（U から始まる）
+ *   SEKIYA_LINE_TOKEN  … SEKIYA.so公式アカウントのチャネルアクセストークン（入居者への通知用）
  * トークンはここ（コード）には書かない。
  */
 
@@ -46,7 +45,7 @@ function doPost(e) {
     const pos = appendByHeader_(record);
 
     try {
-      notify_(props, record, pos);
+      notifyApplicant_(props, record);
     } catch (err) {
       console.error('notify failed: ' + err);
     }
@@ -250,32 +249,24 @@ function toCell_(header, v) {
   return s;
 }
 
-function notify_(props, r, pos) {
-  const token = props.getProperty('NOTIFY_LINE_TOKEN');
-  const to = props.getProperty('NOTIFY_USER_ID');
+function notifyApplicant_(props, r) {
+  const token = props.getProperty('SEKIYA_LINE_TOKEN');
+  const to = r['LINE userId'];
   if (!token || !to) return;
 
-  const name = [r['姓'], r['名']].filter(Boolean).join(' ');
-  const idLine = r['国籍区分'] === '日本以外の国籍'
-    ? '外国籍（' + (r['国籍'] || '') + '）/ ' + (r['在留資格'] || '')
-    : '日本国籍 / マイナンバーカード: ' + (r['マイナンバーカード'] || '');
-  const lines = [
-    '【SEKIYA.so】入居確定フォームが届きました',
+  const name = [r['姓'], r['名']].filter(Boolean).join('') || r['LINE表示名'] || '';
+  const text = [
+    `${name}さん、SEKIYA.soへのお申し込みを受け付けました。`,
     '',
-    '氏名: ' + name + (r['フルネーム（ローマ字）'] ? '（' + r['フルネーム（ローマ字）'] + '）' : ''),
-    '国籍: ' + idLine,
-    '部屋: ' + (r['部屋タイプ'] || ''),
-    '入居: ' + (r['入居開始日'] || '') + ' 〜 ' + (r['退去予定日'] || ''),
-    'LINE: ' + (r['LINE表示名'] || ''),
-  ];
-  if (r['要確認']) lines.push('', '⚠ ' + r['要確認']);
-  if (pos.url) lines.push('', pos.url + '#gid=' + pos.gid + '&range=A' + pos.row);
+    '内容を確認次第、改めてご連絡いたします。',
+    'ご不明な点はこのトークからお気軽にどうぞ。',
+  ].join('\n');
 
   const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
     method: 'post',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + token },
-    payload: JSON.stringify({ to: to, messages: [{ type: 'text', text: lines.join('\n') }] }),
+    payload: JSON.stringify({ to: to, messages: [{ type: 'text', text }] }),
     muteHttpExceptions: true,
   });
   if (res.getResponseCode() !== 200) throw new Error(res.getContentText());

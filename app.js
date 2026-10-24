@@ -43,7 +43,7 @@
           options: [opt("持っている", "o.mnHave"), opt("持っていない", "o.mnNone"), opt("申請中", "o.mnApplying")],
         },
         { id: "idConfirmJp", type: "confirm", label: "f.idConfirmJp", col: "本人確認書類の提示", required: true, when: isJapan },
-        { id: "nationality", type: "text", label: "f.nationality", hint: "f.nationality.hint", col: "国籍", required: true, when: isForeign },
+        { id: "nationality", type: "text", label: "f.nationality", col: "国籍", required: true, when: isForeign },
         {
           id: "visaStatus", type: "select", label: "f.visaStatus", col: "在留資格", required: true, when: isForeign,
           options: [
@@ -126,8 +126,7 @@
           ],
         },
         { id: "reason", type: "textarea", label: "f.reason", col: "入居を決めた理由を教えてください！", required: true, rows: 3 },
-        { id: "message", type: "textarea", label: "f.message", col: "最後に、質問や意気込みなどあればご記入ください！", rows: 3 },
-        { id: "baggage", type: "confirm", label: "f.baggage", col: "以下ご確認くだください", required: true, sheetValue: "荷物の搬入は入居1日前から可能です" },
+{ id: "baggage", type: "confirm", label: "f.baggage", col: "以下ご確認くだください", required: true, sheetValue: "荷物の搬入は入居1日前から可能です" },
       ],
     },
   ];
