@@ -4,6 +4,7 @@
  * スクリプトプロパティ（プロジェクトの設定 → スクリプト プロパティ）に入れる値:
  *   LIFF_CHANNEL_ID    … ミニアプリ（LIFF）を作ったチャネルのチャネルID（数字）
  *   SEKIYA_LINE_TOKEN  … SEKIYA.so公式アカウントのチャネルアクセストークン（入居者への通知用）
+ *   DISCORD_WEBHOOK_URL … 申し込み受付をDiscordに通知するWebhook URL（任意）
  * トークンはここ（コード）には書かない。
  */
 
@@ -47,7 +48,12 @@ function doPost(e) {
     try {
       notifyApplicant_(props, record);
     } catch (err) {
-      console.error('notify failed: ' + err);
+      console.error('notify applicant failed: ' + err);
+    }
+    try {
+      notifyDiscord_(props, record);
+    } catch (err) {
+      console.error('notify discord failed: ' + err);
     }
     return json_({ ok: true });
   } catch (err) {
@@ -270,6 +276,30 @@ function notifyApplicant_(props, r) {
     muteHttpExceptions: true,
   });
   if (res.getResponseCode() !== 200) throw new Error(res.getContentText());
+}
+
+function notifyDiscord_(props, r) {
+  const webhookUrl = props.getProperty('DISCORD_WEBHOOK_URL');
+  if (!webhookUrl) return;
+
+  const name = [r['姓'], r['名']].filter(Boolean).join('') || r['LINE表示名'] || '（不明）';
+  const idLine = r['国籍区分'] === '日本以外の国籍'
+    ? '外国籍（' + (r['国籍'] || '') + '）/ ' + (r['在留資格'] || '')
+    : '日本国籍';
+  const content = [
+    '📋 **SEKIYA.so 新規申し込み**',
+    '氏名: ' + name,
+    '国籍: ' + idLine,
+    '部屋: ' + (r['部屋タイプ'] || ''),
+    '入居: ' + (r['入居開始日'] || '') + ' 〜 ' + (r['退去予定日'] || ''),
+  ].join('\n');
+
+  UrlFetchApp.fetch(webhookUrl, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ content }),
+    muteHttpExceptions: true,
+  });
 }
 
 function json_(obj) {
