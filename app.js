@@ -134,7 +134,7 @@
 
   const state = {
     lang: "ja",
-    screen: "intro", // intro | step | review | done
+    screen: "intro", // intro | step | review | done | status
     step: 0,
     fromReview: false,
     answers: {},
@@ -142,6 +142,9 @@
     sending: false,
     sendError: "",
     dev: false,
+    statusData: null,  // { found, status, name, moveIn, moveOut, phases }
+    statusLoading: false,
+    statusError: "",
   };
 
   const $app = document.getElementById("app");
@@ -349,6 +352,7 @@
         <div><dt>💬</dt><dd>${esc(t("intro.contact"))}</dd></div>
       </dl>
       <button type="button" class="btn btn--primary btn--block" data-act="start">${esc(t("intro.start"))}</button>
+      <button type="button" class="btn btn--ghost btn--block" data-act="checkStatus">${esc(t("status.check"))}</button>
     </main>`;
 
   const renderStep = () => {
@@ -402,13 +406,46 @@
       <div class="done__mark" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg></div>
       <h2>${esc(t("done.title"))}</h2>
       <p>${esc(t("done.body"))}</p>
+      <button type="button" class="btn btn--ghost btn--block" data-act="checkStatus">${esc(t("status.check"))}</button>
       ${!state.dev && window.liff && liff.isInClient && liff.isInClient() ? `<button type="button" class="btn btn--primary btn--block" data-act="close">${esc(t("done.close"))}</button>` : ""}
     </main>`;
+
+  const renderStatus = () => {
+    const d = state.statusData;
+    const phases = (d && d.phases) || ["受付", "審査中", "契約書送付", "契約締結", "入居確認", "入居完了"];
+    const phaseKeys = ["o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.checkin", "o.phase.complete"];
+    const cur = d ? phases.indexOf(d.status) : -1;
+
+    const stepsHtml = phases.map((p, i) => {
+      const done = cur >= 0 && i < cur;
+      const active = i === cur;
+      return `<li class="phase-item ${done ? "is-done" : ""} ${active ? "is-active" : ""}">
+        <span class="phase-dot" aria-hidden="true">${done ? "✓" : i + 1}</span>
+        <span>${esc(t(phaseKeys[i]))}</span>
+      </li>`;
+    }).join("");
+
+    return `
+      ${header()}
+      <main class="card">
+        <h2>${esc(t("status.title"))}</h2>
+        ${state.statusLoading ? `<p class="muted">${esc(t("status.loading"))}</p>` : ""}
+        ${state.statusError ? `<p class="banner banner--err">${esc(state.statusError)}</p>` : ""}
+        ${d && d.found ? `
+          <p class="muted">${esc(t("status.name", { name: d.name }))}</p>
+          <ol class="phase-list">${stepsHtml}</ol>
+          ${d.moveIn ? `<p class="muted" style="margin-top:1rem;font-size:.85rem">${esc(t("f.moveIn"))}: ${esc(d.moveIn.replace(/-/g, "/"))} 〜 ${esc((d.moveOut || "").replace(/-/g, "/"))}</p>` : ""}
+        ` : d && !d.found ? `<p>${esc(t("status.notFound"))}</p>` : ""}
+      </main>
+      <nav class="bar">
+        <button type="button" class="btn btn--ghost" data-act="backToIntro">${esc(t("nav.back"))}</button>
+      </nav>`
+  };
 
   const render = (opts = {}) => {
     document.documentElement.lang = state.lang;
     document.title = `SEKIYA.so ${t("app.title")}`;
-    const html = { intro: renderIntro, step: renderStep, review: renderReview, done: renderDone }[state.screen]();
+    const html = { intro: renderIntro, step: renderStep, review: renderReview, done: renderDone, status: renderStatus }[state.screen]();
     $app.innerHTML = html;
     $app.dataset.screen = state.screen;
     $app.classList.toggle("is-entering", !!opts.scrollTop);
@@ -508,7 +545,33 @@
 
     if (act === "submit") submit();
     if (act === "close") { try { liff.closeWindow(); } catch (_) {} }
+    if (act === "checkStatus") { state.screen = "status"; state.statusData = null; state.statusError = ""; render({ scrollTop: true }); fetchStatus(); }
+    if (act === "backToIntro") { state.screen = "intro"; render({ scrollTop: true }); }
   });
+
+  // ---------- status ----------
+  const fetchStatus = async () => {
+    state.statusLoading = true; render();
+    try {
+      let idToken = null;
+      if (!state.dev && window.liff) idToken = liff.getIDToken();
+      if (state.dev) {
+        await new Promise((r) => setTimeout(r, 500));
+        state.statusData = { found: true, status: "審査中", name: "テスト 太郎", moveIn: "2026-11-01", moveOut: "2027-04-30", phases: ["受付", "審査中", "契約書送付", "契約締結", "入居確認", "入居完了"] };
+      } else {
+        const url = CFG.GAS_URL.replace(/\/exec(\?.*)?$/, "/exec") + `?action=status&idToken=${encodeURIComponent(idToken || "")}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
+        if (!data.ok) throw new Error(data.error || "status failed");
+        state.statusData = data;
+      }
+    } catch (err) {
+      console.error(err);
+      state.statusError = t("err.status");
+    }
+    state.statusLoading = false; render();
+  };
 
   // ---------- submit ----------
   const buildAnswers = () => {

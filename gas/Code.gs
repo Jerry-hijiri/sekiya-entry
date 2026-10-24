@@ -13,10 +13,19 @@ const SHEET_NAME = 'SEKIYA.so入居確定フォーム';
 const HEADER_ROW = 2;
 const TEXT_COLUMNS = ['電話番号', '在留カード番号'];
 
+// 手続き状況の順序（表示・進捗計算に使う）
+const PHASES = ['受付', '審査中', '契約書送付', '契約締結', '入居確認', '入居完了'];
+
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
     const props = PropertiesService.getScriptProperties();
+
+    // クラウドサイン Webhook（event_type フィールドがある場合）
+    if (body.event_type) {
+      try { handleCloudsign_(body, props); } catch (err) { console.error('cloudsign handler: ' + err); }
+      return json_({ ok: true });
+    }
 
     let profile;
     try {
@@ -48,8 +57,78 @@ function doPost(e) {
   }
 }
 
-function doGet() {
+function doGet(e) {
+  const params = (e && e.parameter) || {};
+
+  // 申請状況照会: ?action=status&idToken=<LIFF IDトークン>
+  if (params.action === 'status') {
+    const props = PropertiesService.getScriptProperties();
+    let profile;
+    try {
+      profile = verifyIdToken_(params.idToken, props.getProperty('LIFF_CHANNEL_ID'));
+    } catch (err) {
+      return json_({ ok: false, code: 'token', error: 'invalid id token' });
+    }
+    const row = findRowByUserId_(profile.sub);
+    if (!row) return json_({ ok: true, found: false });
+    return json_({
+      ok: true, found: true,
+      status: row['手続き状況'] || '受付',
+      name: [row['姓'], row['名']].filter(Boolean).join(' '),
+      moveIn: row['入居開始日'] || '',
+      moveOut: row['退去予定日'] || '',
+      phases: PHASES,
+    });
+  }
+
   return json_({ ok: true, service: 'sekiya-entry' });
+}
+
+// クラウドサイン Webhook: POST で届く
+// スクリプトプロパティ:
+//   CLOUDSIGN_SECRET    … クラウドサインのWebhookシークレット（空でも動くが推奨）
+//   SEKIYA_LINE_TOKEN   … SEKIYA.so公式アカウントのチャネルアクセストークン（入居者への通知用）
+function handleCloudsign_(body, props) {
+  // event_type が document.completed のときだけ動く
+  if (body.event_type !== 'document.completed') return;
+
+  const doc = body.document || {};
+  // 署名者のメールアドレス一覧を抽出
+  const emails = (doc.participants || []).map(function (p) { return (p.email || '').toLowerCase(); }).filter(Boolean);
+  if (!emails.length) return;
+
+  // シートからメールアドレスが一致する行を探す
+  let targetRow = null;
+  for (const email of emails) {
+    targetRow = findRowByEmail_(email);
+    if (targetRow) break;
+  }
+  if (!targetRow) { console.warn('cloudsign: no matching row for emails: ' + emails.join(',')); return; }
+
+  // 手続き状況を「契約締結」に更新
+  updateStatus_(targetRow._rowIndex, '契約締結');
+
+  // 入居者のLINEに通知（SEKIYA.so公式アカウントから）
+  const lineToken = props.getProperty('SEKIYA_LINE_TOKEN');
+  const userId = targetRow['LINE userId'];
+  if (!lineToken || !userId) { console.warn('cloudsign: SEKIYA_LINE_TOKEN or LINE userId missing'); return; }
+
+  const name = [targetRow['姓'], targetRow['名']].filter(Boolean).join(' ') || targetRow['LINE表示名'] || '';
+  const text = [
+    `${name}さん、SEKIYA.soの入居契約が締結されました！`,
+    '',
+    '入居までの最終ご案内を公式LINEよりお送りします。',
+    'ご不明な点は、このトークでお気軽にご連絡ください。',
+  ].join('\n');
+
+  const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + lineToken },
+    payload: JSON.stringify({ to: userId, messages: [{ type: 'text', text }] }),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) throw new Error('LINE push failed: ' + res.getContentText());
 }
 
 function verifyIdToken_(idToken, channelId) {
@@ -105,6 +184,58 @@ function appendByHeader_(record) {
     const rowIndex = Math.max(sheet.getLastRow(), HEADER_ROW) + 1;
     sheet.getRange(rowIndex, 1, 1, values.length).setValues([values]);
     return { row: rowIndex, gid: sheet.getSheetId(), url: ss.getUrl() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// LINE userId でシートの行を探し、{列見出し: 値, _rowIndex} を返す
+function findRowByUserId_(userId) {
+  return findRowBy_('LINE userId', userId);
+}
+
+// メールアドレス（小文字）でシートの行を探す
+function findRowByEmail_(email) {
+  return findRowBy_('メールアドレス', email);
+}
+
+function findRowBy_(colName, value) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= HEADER_ROW) return null;
+  const headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0].map(String);
+  const colIdx = headers.indexOf(colName);
+  if (colIdx === -1) return null;
+  const data = sheet.getRange(HEADER_ROW + 1, 1, lastRow - HEADER_ROW, lastCol).getValues();
+  for (let i = data.length - 1; i >= 0; i--) { // 最新行を優先
+    if (String(data[i][colIdx]).toLowerCase() === String(value).toLowerCase()) {
+      const row = {};
+      headers.forEach(function (h, j) { row[h] = data[i][j]; });
+      row._rowIndex = HEADER_ROW + 1 + i;
+      return row;
+    }
+  }
+  return null;
+}
+
+// 指定行の「手続き状況」列を更新する
+function updateStatus_(rowIndex, status) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const lastCol = Math.max(sheet.getLastColumn(), 1);
+    const headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0].map(String);
+    let colIdx = headers.indexOf('手続き状況');
+    if (colIdx === -1) {
+      headers.push('手続き状況');
+      colIdx = headers.length - 1;
+      sheet.getRange(HEADER_ROW, colIdx + 1).setValue('手続き状況');
+    }
+    sheet.getRange(rowIndex, colIdx + 1).setValue(status);
   } finally {
     lock.releaseLock();
   }

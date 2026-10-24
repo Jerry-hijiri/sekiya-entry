@@ -272,3 +272,34 @@ input[type="date"].input, input[type="datetime-local"].input { min-height: 48px;
   white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
 }
 .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- phase list (status screen) ---------- */
+.phase-list {
+  list-style: none; margin: 20px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0;
+}
+.phase-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0;
+  border-left: 2px solid var(--line);
+  margin-left: 14px;
+  padding-left: 20px;
+  position: relative;
+  color: var(--ink-3);
+  font-size: 0.9rem;
+}
+.phase-item:first-child { padding-top: 0; }
+.phase-item:last-child { border-left-color: transparent; }
+.phase-dot {
+  position: absolute; left: -14px;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: var(--card); border: 2px solid var(--line); color: var(--ink-3);
+  flex-shrink: 0;
+}
+.phase-item.is-done { color: var(--ink-2); border-left-color: var(--ok); }
+.phase-item.is-done .phase-dot { background: var(--ok); border-color: var(--ok); color: #fff; font-size: 13px; }
+.phase-item.is-active { color: var(--ink); font-weight: 600; }
+.phase-item.is-active .phase-dot { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.intro .btn + .btn { margin-top: 10px; }
