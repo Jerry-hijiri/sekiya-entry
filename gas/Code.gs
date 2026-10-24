@@ -279,9 +279,8 @@ function notifyApplicant_(props, r) {
 }
 
 function notifyDiscord_(props, r) {
-  const token = props.getProperty('DISCORD_BOT_TOKEN');
-  const channelId = props.getProperty('DISCORD_CHANNEL_ID');
-  if (!token || !channelId) return;
+  const webhookUrl = props.getProperty('DISCORD_WEBHOOK_URL');
+  if (!webhookUrl) return;
 
   const name = [r['姓'], r['名']].filter(Boolean).join('') || r['LINE表示名'] || '（不明）';
   const idLine = r['国籍区分'] === '日本以外の国籍'
@@ -295,10 +294,9 @@ function notifyDiscord_(props, r) {
     '入居: ' + (r['入居開始日'] || '') + ' 〜 ' + (r['退去予定日'] || ''),
   ].join('\n');
 
-  UrlFetchApp.fetch('https://discord.com/api/v10/channels/' + channelId + '/messages', {
+  UrlFetchApp.fetch(webhookUrl, {
     method: 'post',
     contentType: 'application/json',
-    headers: { Authorization: 'Bot ' + token },
     payload: JSON.stringify({ content }),
     muteHttpExceptions: true,
   });
