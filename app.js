@@ -368,16 +368,17 @@
     if (state.statusLoading) {
       return `${header()}<main class="card intro">${introBody}<p class="muted" style="text-align:center;padding:1rem">${esc(t("status.loading"))}</p></main>`;
     }
+    const allPhases = ["入居申請", "受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"];
+    const allPhaseKeys = ["o.phase.apply", "o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.payment", "o.phase.complete"];
     if (isFound) {
-      const phases = d.phases || ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"];
-      const phaseKeys = ["o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.payment", "o.phase.complete"];
-      const cur = phases.indexOf(d.status);
-      const phaseList = phases.map((p, i) => {
-        const done = cur >= 0 && i < cur;
-        const active = i === cur;
+      const cur = allPhases.indexOf(d.status);
+      const curAdj = cur < 0 ? allPhases.indexOf("受付") : cur; // GASが返さない値の場合は受付扱い
+      const phaseList = allPhases.map((p, i) => {
+        const done = i < curAdj;
+        const active = i === curAdj;
         return `<li class="phase-item ${done ? "is-done" : ""} ${active ? "is-active" : ""}">
           <span class="phase-dot" aria-hidden="true">${done ? "✓" : i + 1}</span>
-          <span>${esc(t(phaseKeys[i]))}</span>
+          <span>${esc(t(allPhaseKeys[i]))}</span>
         </li>`;
       }).join("");
       return `
@@ -387,13 +388,13 @@
           <p class="muted">${esc(t("status.name", { name: d.name }))}</p>
           <ol class="phase-list" style="margin-bottom:1.5rem">${phaseList}</ol>
           <button type="button" class="btn btn--primary btn--block" data-act="viewApplication">${esc(t("intro.view"))}</button>
-          ${canEdit ? `<button type="button" class="btn btn--ghost btn--block" data-act="start">${esc(t("intro.edit"))}</button>` : ""}
         </main>`;
     }
     return `
       ${header()}
       <main class="card intro">
         ${introBody}
+        <ol class="phase-list" style="margin-bottom:1.5rem">${allPhases.map((p, i) => `<li class="phase-item ${i === 0 ? "is-active" : ""}"><span class="phase-dot" aria-hidden="true">${i + 1}</span><span>${esc(t(allPhaseKeys[i]))}</span></li>`).join("")}</ol>
         <button type="button" class="btn btn--primary btn--block" data-act="start">${esc(t("intro.start"))}</button>
         <button type="button" class="btn btn--ghost btn--block" data-act="checkStatus">${esc(t("status.check"))}</button>
       </main>`;
@@ -443,7 +444,11 @@
       </main>
       <nav class="bar">
         ${state.viewOnly
-          ? `<button type="button" class="btn btn--ghost" data-act="backToIntro">${esc(t("nav.back"))}</button>`
+          ? (() => {
+              const canChange = state.statusData && state.statusData.status === "受付";
+              return `<button type="button" class="btn btn--ghost" data-act="backToIntro">${esc(t("nav.back"))}</button>
+                ${canChange ? `<button type="button" class="btn btn--ghost" data-act="start">${esc(t("intro.edit"))}</button>` : ""}`;
+            })()
           : `<button type="button" class="btn btn--ghost" data-act="back" ${state.sending ? "disabled" : ""}>${esc(t("nav.back"))}</button>
              <button type="button" class="btn btn--primary" data-act="submit" ${state.sending ? "disabled" : ""}>${state.sending ? `<span class="spinner" aria-hidden="true"></span>${esc(t("nav.sending"))}` : esc(t("nav.submit"))}</button>`
         }
@@ -462,9 +467,9 @@
 
   const renderStatus = () => {
     const d = state.statusData;
-    const phases = (d && d.phases) || ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"];
-    const phaseKeys = ["o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.payment", "o.phase.complete"];
-    const cur = d ? phases.indexOf(d.status) : -1;
+    const phases = ["入居申請", "受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"];
+    const phaseKeys = ["o.phase.apply", "o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.payment", "o.phase.complete"];
+    const cur = d && d.found ? phases.indexOf(d.status) : 0;
 
     const stepsHtml = phases.map((p, i) => {
       const done = cur >= 0 && i < cur;
