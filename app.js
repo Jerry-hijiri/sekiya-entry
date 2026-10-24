@@ -144,6 +144,7 @@
     screen: "intro", // intro | step | review | done | status
     step: 0,
     fromReview: false,
+    viewOnly: false,
     answers: {},
     errors: {},
     sending: false,
@@ -348,19 +349,38 @@
     return `<div class="${cls}" data-field="${f.id}"><label for="in-${f.id}">${labelHtml}</label>${hint}${control}${errHtml}</div>`;
   };
 
-  const renderIntro = () => `
-    ${header()}
-    <main class="card intro">
+  const renderIntro = () => {
+    const d = state.statusData;
+    const isFound = d && d.found;
+    const canEdit = isFound && d.status === "受付";
+    const introBody = `
       <h1>${esc(t("app.title"))}</h1>
       <p class="lead">${esc(t("intro.lead"))}</p>
       <p>${esc(t("intro.body"))}</p>
       <dl class="facts">
         <div><dt>📍</dt><dd>${esc(t("intro.address"))}</dd></div>
         <div><dt>💬</dt><dd>${esc(t("intro.contact"))}</dd></div>
-      </dl>
-      <button type="button" class="btn btn--primary btn--block" data-act="start">${esc(t("intro.start"))}</button>
-      <button type="button" class="btn btn--ghost btn--block" data-act="checkStatus">${esc(t("status.check"))}</button>
-    </main>`;
+      </dl>`;
+    if (state.statusLoading) {
+      return `${header()}<main class="card intro">${introBody}<p class="muted" style="text-align:center;padding:1rem">${esc(t("status.loading"))}</p></main>`;
+    }
+    if (isFound) {
+      return `
+        ${header()}
+        <main class="card intro">
+          ${introBody}
+          <button type="button" class="btn btn--primary btn--block" data-act="viewApplication">${esc(t("intro.view"))}</button>
+          ${canEdit ? `<button type="button" class="btn btn--ghost btn--block" data-act="start">${esc(t("intro.edit"))}</button>` : ""}
+        </main>`;
+    }
+    return `
+      ${header()}
+      <main class="card intro">
+        ${introBody}
+        <button type="button" class="btn btn--primary btn--block" data-act="start">${esc(t("intro.start"))}</button>
+        <button type="button" class="btn btn--ghost btn--block" data-act="checkStatus">${esc(t("status.check"))}</button>
+      </main>`;
+  };
 
   const renderStep = () => {
     const step = STEPS[state.step];
@@ -388,22 +408,28 @@
           const dv = displayValue(f);
           return `<div class="row"><dt>${esc(t(f.label))}</dt><dd>${dv ? esc(dv).replace(/\n/g, "<br>") : '<span class="muted">—</span>'}</dd></div>`;
         }).join("");
+      const editBtn = !state.viewOnly
+        ? `<button type="button" class="btn btn--small" data-act="edit" data-step="${i}">${esc(t("nav.edit"))}</button>`
+        : "";
       return `<section class="review">
-        <div class="review__head"><h3>${esc(t("step." + s.id))}</h3><button type="button" class="btn btn--small" data-act="edit" data-step="${i}">${esc(t("nav.edit"))}</button></div>
+        <div class="review__head"><h3>${esc(t("step." + s.id))}</h3>${editBtn}</div>
         <dl>${rows}</dl></section>`;
     }).join("");
     return `
-      ${header()}${progress()}
+      ${header()}${!state.viewOnly ? progress() : ""}
       <main class="card">
         <h2>${esc(t("step.review"))}</h2>
-        <p class="muted">${esc(t("review.lead"))}</p>
-        ${expiryWarning() ? `<p class="banner banner--warn">${esc(t("w.expiry"))}</p>` : ""}
+        ${!state.viewOnly ? `<p class="muted">${esc(t("review.lead"))}</p>` : ""}
+        ${!state.viewOnly && expiryWarning() ? `<p class="banner banner--warn">${esc(t("w.expiry"))}</p>` : ""}
         ${sections}
-        ${state.sendError ? `<p class="banner banner--err" role="alert">${esc(state.sendError)}</p>` : ""}
+        ${!state.viewOnly && state.sendError ? `<p class="banner banner--err" role="alert">${esc(state.sendError)}</p>` : ""}
       </main>
       <nav class="bar">
-        <button type="button" class="btn btn--ghost" data-act="back" ${state.sending ? "disabled" : ""}>${esc(t("nav.back"))}</button>
-        <button type="button" class="btn btn--primary" data-act="submit" ${state.sending ? "disabled" : ""}>${state.sending ? `<span class="spinner" aria-hidden="true"></span>${esc(t("nav.sending"))}` : esc(t("nav.submit"))}</button>
+        ${state.viewOnly
+          ? `<button type="button" class="btn btn--ghost" data-act="backToIntro">${esc(t("nav.back"))}</button>`
+          : `<button type="button" class="btn btn--ghost" data-act="back" ${state.sending ? "disabled" : ""}>${esc(t("nav.back"))}</button>
+             <button type="button" class="btn btn--primary" data-act="submit" ${state.sending ? "disabled" : ""}>${state.sending ? `<span class="spinner" aria-hidden="true"></span>${esc(t("nav.sending"))}` : esc(t("nav.submit"))}</button>`
+        }
       </nav>`;
   };
 
@@ -441,7 +467,6 @@
         ${d && d.found ? `
           <p class="muted">${esc(t("status.name", { name: d.name }))}</p>
           <ol class="phase-list">${stepsHtml}</ol>
-          ${d.moveIn ? `<p class="muted" style="margin-top:1rem;font-size:.85rem">${esc(t("f.moveIn"))}: ${esc(d.moveIn.replace(/-/g, "/"))} 〜 ${esc((d.moveOut || "").replace(/-/g, "/"))}</p>` : ""}
         ` : d && !d.found ? `<p>${esc(t("status.notFound"))}</p>` : ""}
       </main>
       <nav class="bar">
@@ -515,7 +540,9 @@
     if (!btn) return;
     const act = btn.dataset.act;
 
-    if (act === "start") { state.screen = "step"; state.step = 0; state.errors = {}; render({ scrollTop: true }); }
+    if (act === "start") { state.viewOnly = false; state.screen = "step"; state.step = 0; state.errors = {}; render({ scrollTop: true }); }
+
+    if (act === "viewApplication") { state.screen = "review"; state.viewOnly = true; state.errors = {}; render({ scrollTop: true }); }
 
     if (act === "back") {
       state.errors = {};
@@ -552,19 +579,22 @@
 
     if (act === "submit") submit();
     if (act === "close") { try { liff.closeWindow(); } catch (_) {} }
-    if (act === "checkStatus") { state.screen = "status"; state.statusData = null; state.statusError = ""; render({ scrollTop: true }); fetchStatus(); }
-    if (act === "backToIntro") { state.screen = "intro"; render({ scrollTop: true }); }
+    if (act === "checkStatus") { fetchStatus({ navigate: true }); }
+    if (act === "backToIntro") { state.viewOnly = false; state.screen = "intro"; render({ scrollTop: true }); }
   });
 
   // ---------- status ----------
-  const fetchStatus = async () => {
-    state.statusLoading = true; render();
+  const fetchStatus = async (opts = {}) => {
+    const navigate = opts.navigate !== false;
+    state.statusLoading = true;
+    if (navigate) { state.screen = "status"; state.statusData = null; state.statusError = ""; }
+    render();
     try {
       let idToken = null;
       if (!state.dev && window.liff) idToken = liff.getIDToken();
       if (state.dev) {
         await new Promise((r) => setTimeout(r, 500));
-        state.statusData = { found: true, status: "審査中", name: "テスト 太郎", moveIn: "2026-11-01", moveOut: "2027-04-30", phases: ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"] };
+        state.statusData = { found: true, status: "審査中", name: "テスト 太郎", phases: ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"] };
       } else {
         const url = CFG.GAS_URL.replace(/\/exec(\?.*)?$/, "/exec") + `?action=status&idToken=${encodeURIComponent(idToken || "")}`;
         const res = await fetch(url);
@@ -575,7 +605,7 @@
       }
     } catch (err) {
       console.error(err);
-      state.statusError = t("err.status");
+      if (navigate) state.statusError = t("err.status");
     }
     state.statusLoading = false; render();
   };
@@ -643,11 +673,9 @@
     if (draft && draft.answers && Object.keys(draft.answers).length) {
       state.answers = draft.answers;
       if (draft.lang) state.lang = draft.lang;
-      render();
-      toast(t("draft.restored"));
-    } else {
-      render();
     }
+    // 申請済みか確認（intro画面のボタンを変えるため）
+    await fetchStatus({ navigate: false });
   };
 
   boot();
