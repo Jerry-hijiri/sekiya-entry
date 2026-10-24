@@ -14,7 +14,7 @@ const HEADER_ROW = 2;
 const TEXT_COLUMNS = ['電話番号', '在留カード番号'];
 
 // 手続き状況の順序（表示・進捗計算に使う）
-const PHASES = ['受付', '審査中', '契約書送付', '契約締結', '入居確認', '入居完了'];
+const PHASES = ['受付', '審査中', '契約書送付', '契約締結', '入金確認', '入居完了'];
 
 function doPost(e) {
   try {
@@ -346,11 +346,16 @@ function onStatusChange(e) {
     const lineName = lineNameCol ? sheet.getRange(row, lineNameCol).getValue() : '';
     const name = [nameLast, nameFirst].filter(Boolean).join(' ') || lineName || '';
 
+    const moveInCol = headers.indexOf('入居開始日') + 1;
+    const roomTypeCol = headers.indexOf('部屋タイプ') + 1;
+    const moveIn = moveInCol ? sheet.getRange(row, moveInCol).getValue() : null;
+    const roomType = roomTypeCol ? sheet.getRange(row, roomTypeCol).getValue() : '';
+
     const props = PropertiesService.getScriptProperties();
     const lineToken = props.getProperty('SEKIYA_LINE_TOKEN');
     if (!lineToken) { console.warn('SEKIYA_LINE_TOKEN not set'); return; }
 
-    const text = buildStatusMessage_(name, newStatus);
+    const text = buildStatusMessage_(name, newStatus, { moveIn, roomType, props });
     const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
       method: 'post',
       contentType: 'application/json',
@@ -364,16 +369,73 @@ function onStatusChange(e) {
   }
 }
 
-function buildStatusMessage_(name, status) {
+function buildStatusMessage_(name, status, extra) {
   const prefix = name ? name + 'さん、' : '';
+
+  if (status === '入金確認' && extra) {
+    const feeText = calcInitialFeeText_(extra.moveIn, extra.roomType, extra.props);
+    return [
+      prefix + 'お振込の確認が取れました！',
+      '',
+      feeText,
+      '',
+      '入居当日の詳細案内を改めてお送りします。',
+      'ご不明な点はこのトークからお気軽にどうぞ。',
+    ].join('\n');
+  }
+
   const messages = {
     '審査中':     prefix + 'SEKIYA.soの入居申請を受け付けました。現在内容を審査中です。',
     '契約書送付': prefix + '入居契約書を送付しました。ご確認のうえご署名をお願いします。',
-    '契約締結':   prefix + '入居契約の締結が完了しました！入居までの最終案内をお送りします。',
-    '入居確認':   prefix + '入居当日の準備が整いました。当日お待ちしています！',
+    '契約締結':   prefix + '入居契約の締結が完了しました！初回お支払いの振込先を別途ご案内します。',
     '入居完了':   prefix + 'SEKIYA.soへようこそ！ご不明な点はいつでもこちらでどうぞ。',
   };
   return messages[status] || prefix + '手続き状況が「' + status + '」に更新されました。';
+}
+
+// 初期費用明細テキストを生成する
+// Script Properties: MONTHLY_SINGLE（個室月額）MONTHLY_DOUBLE（相部屋月額）DEPOSIT（保証金）
+function calcInitialFeeText_(moveInDate, roomType, props) {
+  const monthly = roomType === '相部屋'
+    ? Number(props.getProperty('MONTHLY_DOUBLE') || 46000)
+    : Number(props.getProperty('MONTHLY_SINGLE') || 55000);
+  const deposit = Number(props.getProperty('DEPOSIT') || 20000);
+
+  if (!moveInDate) return '（入居開始日が未入力のため金額を計算できません）';
+
+  const d = moveInDate instanceof Date ? moveInDate : new Date(moveInDate);
+  const day = d.getDate();
+  const monthName = d.getMonth() + 1;
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const daysInMonth = lastDay - day + 1;
+
+  const lines = [];
+  let total = 0;
+  let lineNo = 1;
+
+  if (day > 1) {
+    const prorated = Math.floor(monthly * daysInMonth / 30);
+    lines.push(lineNo++ + '. ' + monthName + '月分日割（' + monthName + '/' + day + '〜' + monthName + '/' + lastDay + '・' + daysInMonth + '日分）：' + prorated.toLocaleString() + '円');
+    total += prorated;
+
+    const nextMonth = d.getMonth() + 2;
+    lines.push(lineNo++ + '. ' + nextMonth + '月分賃料・共益費（1ヶ月分前払い）：' + monthly.toLocaleString() + '円');
+    total += monthly;
+  } else {
+    lines.push(lineNo++ + '. ' + monthName + '月分賃料・共益費（1ヶ月分前払い）：' + monthly.toLocaleString() + '円');
+    total += monthly;
+  }
+
+  lines.push(lineNo++ + '. 保証金（デポジット・退去時返還）：' + deposit.toLocaleString() + '円');
+  total += deposit;
+
+  return [
+    '【初回お支払い明細（初期費用）】',
+    lines.join('\n'),
+    '─────────────────',
+    'ご請求合計金額：' + total.toLocaleString() + '円',
+    '（お振込期日：入居開始日前日まで）',
+  ].join('\n');
 }
 
 // エディタから1回だけ手動実行してトリガーを登録する

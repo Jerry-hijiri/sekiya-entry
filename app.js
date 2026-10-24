@@ -103,6 +103,14 @@
       ],
     },
     {
+      id: "emergency",
+      fields: [
+        { id: "emergencyName", type: "text", label: "f.emergencyName", col: "緊急連絡先 氏名", required: true },
+        { id: "emergencyPhone", type: "tel", label: "f.emergencyPhone", hint: "f.emergencyPhone.hint", col: "緊急連絡先 電話番号", required: true, check: "phone" },
+        { id: "emergencyRelation", type: "text", label: "f.emergencyRelation", col: "緊急連絡先 続柄", required: true },
+      ],
+    },
+    {
       id: "voice",
       fields: [
         {
@@ -411,8 +419,8 @@
 
   const renderStatus = () => {
     const d = state.statusData;
-    const phases = (d && d.phases) || ["受付", "審査中", "契約書送付", "契約締結", "入居確認", "入居完了"];
-    const phaseKeys = ["o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.checkin", "o.phase.complete"];
+    const phases = (d && d.phases) || ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"];
+    const phaseKeys = ["o.phase.accept", "o.phase.review", "o.phase.contract_sent", "o.phase.signed", "o.phase.payment", "o.phase.complete"];
     const cur = d ? phases.indexOf(d.status) : -1;
 
     const stepsHtml = phases.map((p, i) => {
@@ -556,7 +564,7 @@
       if (!state.dev && window.liff) idToken = liff.getIDToken();
       if (state.dev) {
         await new Promise((r) => setTimeout(r, 500));
-        state.statusData = { found: true, status: "審査中", name: "テスト 太郎", moveIn: "2026-11-01", moveOut: "2027-04-30", phases: ["受付", "審査中", "契約書送付", "契約締結", "入居確認", "入居完了"] };
+        state.statusData = { found: true, status: "審査中", name: "テスト 太郎", moveIn: "2026-11-01", moveOut: "2027-04-30", phases: ["受付", "審査中", "契約書送付", "契約締結", "入金確認", "入居完了"] };
       } else {
         const url = CFG.GAS_URL.replace(/\/exec(\?.*)?$/, "/exec") + `?action=status&idToken=${encodeURIComponent(idToken || "")}`;
         const res = await fetch(url);
