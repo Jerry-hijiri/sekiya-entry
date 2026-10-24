@@ -100,7 +100,6 @@
         },
         { id: "moveIn", type: "date", label: "f.moveIn", col: "入居開始日", required: true, half: true },
         { id: "moveOut", type: "date", label: "f.moveOut", col: "退去予定日", required: true, half: true, check: "afterMoveIn" },
-        { id: "moving", type: "datetime", label: "f.moving", hint: "f.moving.hint", col: "予定している引越し日時", required: true },
       ],
     },
     {
@@ -116,7 +115,16 @@
             opt("起業している", "o.st.doing"),
           ],
         },
-        { id: "goal", type: "textarea", label: "f.goal", col: "退去までに達成したいこと  / 目標があれば教えてください！", rows: 3 },
+        {
+          id: "source", type: "radio", label: "f.source", col: "SEKIYA.soを知った経緯", required: true, other: true,
+          options: [
+            opt("Instagram", "o.src.instagram"),
+            opt("知人・友人の紹介", "o.src.referral"),
+            opt("大学・学校", "o.src.school"),
+            opt("イベント", "o.src.event"),
+            opt("Web検索", "o.src.web"),
+          ],
+        },
         { id: "reason", type: "textarea", label: "f.reason", col: "入居を決めた理由を教えてください！", required: true, rows: 3 },
         { id: "message", type: "textarea", label: "f.message", col: "最後に、質問や意気込みなどあればご記入ください！", rows: 3 },
         { id: "baggage", type: "confirm", label: "f.baggage", col: "以下ご確認くだください", required: true, sheetValue: "荷物の搬入は入居1日前から可能です" },
