@@ -621,7 +621,7 @@
     state.dev = params.has("dev") || !CFG.LIFF_ID || CFG.LIFF_ID.startsWith("REPLACE");
     if (!state.dev) {
       try {
-        await liff.init({ liffId: CFG.LIFF_ID });
+        await liff.init({ liffId: CFG.LIFF_ID, withLoginOnExternalBrowser: true });
         if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       } catch (err) {
         console.error(err);
