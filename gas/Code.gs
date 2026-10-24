@@ -357,10 +357,12 @@ function setupTrigger() {
   console.log('✅ onStatusChange トリガーを登録しました');
 }
 
-// エディタから手動で実行して、通知の設定を確かめる用
+// エディタから手動で実行して、通知の設定を確かめる用（自分のLINE userIdを指定する）
 function testNotify() {
-  notify_(PropertiesService.getScriptProperties(), {
-    '姓': 'テスト', '名': '太郎', '国籍区分': '日本以外の国籍', '国籍': '大韓民国', '在留資格': '特定活動',
-    '部屋タイプ': '個室', '入居開始日': '2026/11/01', '退去予定日': '2027/04/30', 'LINE表示名': 'test',
-  }, { row: HEADER_ROW + 1, gid: 0, url: SpreadsheetApp.getActiveSpreadsheet().getUrl() });
+  const props = PropertiesService.getScriptProperties();
+  notifyApplicant_(props, {
+    '姓': 'テスト', '名': '太郎', 'LINE表示名': 'test',
+    'LINE userId': props.getProperty('NOTIFY_USER_ID'), // テスト用に自分のIDへ送る
+  });
+  console.log('testNotify done');
 }
