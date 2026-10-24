@@ -285,6 +285,87 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ============================================================
+// 手続き状況が変わったら入居者のLINEに自動通知（installable onEdit）
+// 初回1回だけ setupTrigger() をエディタから手動実行すること
+// ============================================================
+
+// スプレッドシートの「手続き状況」列の値が変わったときに発火
+function onStatusChange(e) {
+  try {
+    const sheet = e.source.getSheetByName(SHEET_NAME);
+    if (!sheet || e.source.getActiveSheet().getName() !== SHEET_NAME) return;
+
+    const range = e.range;
+    const lastCol = Math.max(sheet.getLastColumn(), 1);
+    const headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0].map(String);
+    const statusCol = headers.indexOf('手続き状況') + 1; // 1-indexed
+    if (statusCol === 0) return;
+
+    // 変更されたセルが「手続き状況」列かどうか
+    if (range.getColumn() > statusCol || range.getColumn() + range.getNumColumns() - 1 < statusCol) return;
+    if (range.getRow() <= HEADER_ROW) return; // ヘッダー行は無視
+
+    const newStatus = String(e.value || '').trim();
+    if (!newStatus || PHASES.indexOf(newStatus) === -1) return;
+
+    // 同じ行から LINE userId を取得
+    const row = range.getRow();
+    const userIdCol = headers.indexOf('LINE userId') + 1;
+    const nameLastCol = headers.indexOf('姓') + 1;
+    const nameFirstCol = headers.indexOf('名') + 1;
+    const lineNameCol = headers.indexOf('LINE表示名') + 1;
+    if (userIdCol === 0) return;
+
+    const userId = sheet.getRange(row, userIdCol).getValue();
+    if (!userId) return;
+
+    const nameLast = nameLastCol ? sheet.getRange(row, nameLastCol).getValue() : '';
+    const nameFirst = nameFirstCol ? sheet.getRange(row, nameFirstCol).getValue() : '';
+    const lineName = lineNameCol ? sheet.getRange(row, lineNameCol).getValue() : '';
+    const name = [nameLast, nameFirst].filter(Boolean).join(' ') || lineName || '';
+
+    const props = PropertiesService.getScriptProperties();
+    const lineToken = props.getProperty('SEKIYA_LINE_TOKEN');
+    if (!lineToken) { console.warn('SEKIYA_LINE_TOKEN not set'); return; }
+
+    const text = buildStatusMessage_(name, newStatus);
+    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + lineToken },
+      payload: JSON.stringify({ to: String(userId), messages: [{ type: 'text', text }] }),
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) console.error('LINE push failed: ' + res.getContentText());
+  } catch (err) {
+    console.error('onStatusChange error: ' + err);
+  }
+}
+
+function buildStatusMessage_(name, status) {
+  const prefix = name ? name + 'さん、' : '';
+  const messages = {
+    '審査中':     prefix + 'SEKIYA.soの入居申請を受け付けました。現在内容を審査中です。',
+    '契約書送付': prefix + '入居契約書を送付しました。ご確認のうえご署名をお願いします。',
+    '契約締結':   prefix + '入居契約の締結が完了しました！入居までの最終案内をお送りします。',
+    '入居確認':   prefix + '入居当日の準備が整いました。当日お待ちしています！',
+    '入居完了':   prefix + 'SEKIYA.soへようこそ！ご不明な点はいつでもこちらでどうぞ。',
+  };
+  return messages[status] || prefix + '手続き状況が「' + status + '」に更新されました。';
+}
+
+// エディタから1回だけ手動実行してトリガーを登録する
+function setupTrigger() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // 重複登録を防ぐ
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'onStatusChange') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('onStatusChange').forSpreadsheet(ss).onEdit().create();
+  console.log('✅ onStatusChange トリガーを登録しました');
+}
+
 // エディタから手動で実行して、通知の設定を確かめる用
 function testNotify() {
   notify_(PropertiesService.getScriptProperties(), {
