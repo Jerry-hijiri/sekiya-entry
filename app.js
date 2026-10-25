@@ -689,16 +689,13 @@
         console.info("[dev] payload", answers);
         await new Promise((r) => setTimeout(r, 700));
       } else {
-        const res = await fetch(CFG.GAS_URL, {
+        await fetch(CFG.GAS_URL, {
           method: "POST",
+          mode: "no-cors",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ idToken: liff.getIDToken(), answers }),
         });
-        const raw = await res.text();
-        let data;
-        try { data = JSON.parse(raw); } catch (_) { throw new Error("GAS non-JSON: " + raw.slice(0, 200)); }
-        if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
-        if (!data.ok) throw new Error(data.error || "send failed");
+        // no-cors ではレスポンスが読めない（opaque）。送信できたと見なして進む。
         try {
           if (liff.isInClient()) await liff.sendMessages([{ type: "text", text: "入居確定フォームを送信しました" }]);
         } catch (_) {}
@@ -706,7 +703,7 @@
       state.sending = false; state.screen = "done"; render({ scrollTop: true });
     } catch (err) {
       console.error(err);
-      state.sending = false; state.sendError = (err && err.message) ? err.message : t("err.send"); render();
+      state.sending = false; state.sendError = t("err.send"); render();
     }
   };
 
