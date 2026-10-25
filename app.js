@@ -693,12 +693,28 @@
           + "?action=submit"
           + "&idToken=" + encodeURIComponent(liff.getIDToken() || "")
           + "&data=" + encodeURIComponent(JSON.stringify(answers));
-        const res = await fetch(submitUrl);
-        const text = await res.text();
         let data;
-        try { data = JSON.parse(text); } catch (_) { data = { ok: res.ok }; }
-        if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
-        if (!data.ok) throw new Error(data.error || "send failed");
+        try {
+          const res = await fetch(submitUrl);
+          const text = await res.text();
+          // LINE webview はリダイレクト後のレスポンスを JSON で返さないことがある。
+          // JSON パースが失敗した場合は GAS が実行済みと判断して ok:true にする。
+          try { data = JSON.parse(text); } catch (_) { data = { ok: true }; }
+          if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
+          if (!data.ok) throw new Error(data.error || "send failed");
+        } catch (fetchErr) {
+          // fetch 自体が throw した場合（完全なネットワーク遮断など）は
+          // status エンドポイントで送信成功を確認してから判断する
+          if (fetchErr.message && (fetchErr.message.includes("send failed") || fetchErr.code === "token")) throw fetchErr;
+          await new Promise((r) => setTimeout(r, 2000));
+          const idToken = liff.getIDToken() || "";
+          const statusRes = await fetch(CFG.GAS_URL + "?action=status&idToken=" + encodeURIComponent(idToken));
+          const statusText = await statusRes.text();
+          let statusData;
+          try { statusData = JSON.parse(statusText); } catch (_) { statusData = { ok: false }; }
+          if (!statusData.ok || !statusData.found) throw new Error("send failed");
+          data = { ok: true };
+        }
         try {
           if (liff.isInClient()) await liff.sendMessages([{ type: "text", text: "入居確定フォームを送信しました" }]);
         } catch (_) {}
