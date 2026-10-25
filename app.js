@@ -706,7 +706,7 @@
       state.sending = false; state.screen = "done"; render({ scrollTop: true });
     } catch (err) {
       console.error(err);
-      state.sending = false; state.sendError = t("err.send"); render();
+      state.sending = false; state.sendError = (err && err.message) ? err.message : t("err.send"); render();
     }
   };
 
