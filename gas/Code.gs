@@ -87,9 +87,17 @@ function doGet(e) {
       'LINE userId': profile.sub,
       '手続き状況': '受付',
     });
-    appendByHeader_(record);
-    try { notifyApplicant_(props, record); } catch (err) { console.error('notify applicant: ' + err); }
-    try { notifyDiscord_(props, record); } catch (err) { console.error('notify discord: ' + err); }
+    const existing = findRowByUserId_(profile.sub);
+    const isNew = !existing;
+    if (existing) {
+      updateRowByIndex_(existing._rowIndex, record);
+    } else {
+      appendByHeader_(record);
+    }
+    if (isNew) {
+      try { notifyApplicant_(props, record); } catch (err) { console.error('notify applicant: ' + err); }
+      try { notifyDiscord_(props, record); } catch (err) { console.error('notify discord: ' + err); }
+    }
     return json_({ ok: true });
   }
 
@@ -200,6 +208,28 @@ function sanitize_(answers) {
     out[k] = v;
   });
   return out;
+}
+
+// 既存行を record の内容で上書きする（userId が既に登録済みの場合）
+function updateRowByIndex_(rowIndex, record) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const lastCol = Math.max(sheet.getLastColumn(), 1);
+    const headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0].map(String);
+    Object.keys(record).forEach(function(key) {
+      let colIdx = headers.indexOf(key);
+      if (colIdx === -1) {
+        headers.push(key);
+        colIdx = headers.length - 1;
+        sheet.getRange(HEADER_ROW, colIdx + 1).setValue(key);
+      }
+      const v = record[key];
+      sheet.getRange(rowIndex, colIdx + 1).setValue(v instanceof Date ? v : toCell_(key, String(v)));
+    });
+  } finally { lock.releaseLock(); }
 }
 
 // 見出し名で列を合わせて1行追加する。無い見出しは右端に足す。

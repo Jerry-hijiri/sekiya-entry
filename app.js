@@ -694,7 +694,9 @@
           + "&idToken=" + encodeURIComponent(liff.getIDToken() || "")
           + "&data=" + encodeURIComponent(JSON.stringify(answers));
         const res = await fetch(submitUrl);
-        const data = await res.json();
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch (_) { data = { ok: res.ok }; }
         if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
         if (!data.ok) throw new Error(data.error || "send failed");
         try {
