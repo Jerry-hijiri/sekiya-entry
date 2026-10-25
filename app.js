@@ -694,7 +694,9 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ idToken: liff.getIDToken(), answers }),
         });
-        const data = await res.json();
+        const raw = await res.text();
+        let data;
+        try { data = JSON.parse(raw); } catch (_) { throw new Error("GAS non-JSON: " + raw.slice(0, 200)); }
         if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
         if (!data.ok) throw new Error(data.error || "send failed");
         try {
