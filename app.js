@@ -689,13 +689,14 @@
         console.info("[dev] payload", answers);
         await new Promise((r) => setTimeout(r, 700));
       } else {
-        await fetch(CFG.GAS_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ idToken: liff.getIDToken(), answers }),
-        });
-        // no-cors ではレスポンスが読めない（opaque）。送信できたと見なして進む。
+        const submitUrl = CFG.GAS_URL
+          + "?action=submit"
+          + "&idToken=" + encodeURIComponent(liff.getIDToken() || "")
+          + "&data=" + encodeURIComponent(JSON.stringify(answers));
+        const res = await fetch(submitUrl);
+        const data = await res.json();
+        if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
+        if (!data.ok) throw new Error(data.error || "send failed");
         try {
           if (liff.isInClient()) await liff.sendMessages([{ type: "text", text: "入居確定フォームを送信しました" }]);
         } catch (_) {}

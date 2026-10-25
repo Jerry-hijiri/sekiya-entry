@@ -65,6 +65,34 @@ function doPost(e) {
 function doGet(e) {
   const params = (e && e.parameter) || {};
 
+  // フォーム送信: ?action=submit&idToken=<LIFF IDトークン>&data=<JSON>
+  if (params.action === 'submit') {
+    const props = PropertiesService.getScriptProperties();
+    let profile;
+    try {
+      profile = verifyIdToken_(params.idToken, props.getProperty('LIFF_CHANNEL_ID'));
+    } catch (err) {
+      console.warn('submit id token rejected: ' + err);
+      return json_({ ok: false, code: 'token', error: 'invalid id token' });
+    }
+    let answers;
+    try {
+      answers = JSON.parse(params.data || '{}');
+    } catch (err) {
+      return json_({ ok: false, error: 'invalid data' });
+    }
+    const record = Object.assign({}, sanitize_(answers), {
+      'タイムスタンプ': new Date(),
+      'LINE表示名': profile.name || '',
+      'LINE userId': profile.sub,
+      '手続き状況': '受付',
+    });
+    appendByHeader_(record);
+    try { notifyApplicant_(props, record); } catch (err) { console.error('notify applicant: ' + err); }
+    try { notifyDiscord_(props, record); } catch (err) { console.error('notify discord: ' + err); }
+    return json_({ ok: true });
+  }
+
   // 申請状況照会: ?action=status&idToken=<LIFF IDトークン>
   if (params.action === 'status') {
     const props = PropertiesService.getScriptProperties();
