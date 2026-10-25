@@ -638,7 +638,11 @@
         const url = CFG.GAS_URL.replace(/\/exec(\?.*)?$/, "/exec") + `?action=status&idToken=${encodeURIComponent(idToken || "")}`;
         const res = await fetch(url);
         const data = await res.json();
-        if (data.code === "token") { saveDraft(); liff.login({ redirectUri: location.href }); return; }
+        if (data.code === "token") {
+          if (navigate) { saveDraft(); liff.login({ redirectUri: location.href }); return; }
+          // 起動時チェック（navigate:false）はトークン未取得でもフォームを表示する
+          state.statusLoading = false; render(); return;
+        }
         if (!data.ok) throw new Error(data.error || "status failed");
         state.statusData = data;
         // draftがない場合のみGASのフォームデータでanswersを復元
@@ -733,7 +737,14 @@
     if (!state.dev) {
       try {
         await liff.init({ liffId: CFG.LIFF_ID, withLoginOnExternalBrowser: true });
-        if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+        // ログイン直後も isLoggedIn が false のままだと無限リロードになるため、1回だけ試す
+        if (!liff.isLoggedIn()) {
+          if (sessionStorage.getItem("sekiya-login-tried")) throw new Error("login loop");
+          sessionStorage.setItem("sekiya-login-tried", "1");
+          liff.login({ redirectUri: location.href });
+          return;
+        }
+        sessionStorage.removeItem("sekiya-login-tried");
       } catch (err) {
         console.error(err);
         $app.innerHTML = `${header()}<main class="card"><p class="banner banner--err">${esc(t("err.liff"))}</p></main>`;
